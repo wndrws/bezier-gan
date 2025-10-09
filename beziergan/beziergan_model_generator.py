@@ -55,6 +55,8 @@ for i in range(airfoils_count):
     latent[i, dim_to_vary] = i / airfoils_count
     for dim, multiplier in config["beziergan"]["latent-transforms"]["dims-multipliers"].items():
         latent[i, int(dim)] = latent[i, int(dim)] * multiplier
+    for dim, value in config["beziergan"]["latent-transforms"]["fixed-dims"].items():
+        latent[i, int(dim)] = float(value)
 
 X = model.synthesize(latent)
 
