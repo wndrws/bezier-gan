@@ -13,6 +13,9 @@ def rotateOp(theta):
 def scalingOp(s_x, s_y):
     return np.array([[s_x, 0.0], [0.0, s_y]])
 
+def shiftOp(x, y):
+    return np.array([x, y])
+
 if len(sys.argv) < 2:
     print("Config file is not provided!")
     exit(-1)
@@ -48,11 +51,17 @@ model.restore(directory=directory)
 airfoils_count = config["blade"]["airfoils-count"]
 
 powerful_dims = np.array(config["beziergan"]["latent-transforms"]["powerful-dims"])
-dim_to_vary = config["beziergan"]["latent-transforms"]["dim-to-vary"] # rng.choice(powerful_dims, 1)
+if config["beziergan"]["latent-transforms"].get("dim-to-vary", None) != None:
+    dim_to_vary = config["beziergan"]["latent-transforms"]["dim-to-vary"] 
+else:
+    dim_to_vary = rng.choice(powerful_dims, 1)
 
 latent = np.array([rng.random((latent_dim,))]*airfoils_count)
 for i in range(airfoils_count):
-    latent[i, dim_to_vary] = i / airfoils_count
+    if config["beziergan"]["latent-transforms"]["invert-dim-to-vary"]:
+        latent[i, dim_to_vary] = 1 - i / airfoils_count
+    else:
+        latent[i, dim_to_vary] = i / airfoils_count
     for dim, multiplier in config["beziergan"]["latent-transforms"]["dims-multipliers"].items():
         latent[i, int(dim)] = latent[i, int(dim)] * multiplier
     for dim, value in config["beziergan"]["latent-transforms"]["fixed-dims"].items():
@@ -66,6 +75,14 @@ x_base_scale = float(config["blade"]["affine-transforms"]["x-base-scale"]) # rng
 y_base_scale = float(config["blade"]["affine-transforms"]["y-base-scale"]) # rng.uniform(1.0, 1.5)
 tip_twist = float(config["blade"]["affine-transforms"]["tip-twist"]) # rng.uniform(-15, 5)
 angle_of_attack = float(config["blade"]["angle-of-attack"])
+x_shift = float(config["blade"]["affine-transforms"]["x-base-shift"])
+y_shift = float(config["blade"]["affine-transforms"]["y-base-shift"])
+axis_x = float(config["blade"]["affine-transforms"]["x-tip-shift"])
+axis_y = float(config["blade"]["affine-transforms"]["y-tip-shift"])
+
+shifts_x = np.linspace(x_shift, axis_x + x_shift, airfoils_count)
+shifts_y = np.linspace(y_shift, axis_y + y_shift, airfoils_count)
+shiftOps = [shiftOp(x, y) for x, y in zip(shifts_x, shifts_y)]
 
 scaleFactors_x = np.linspace(x_base_scale, x_tip_scale, airfoils_count)
 scaleFactors_y = np.linspace(y_base_scale, y_tip_scale, airfoils_count)
@@ -74,10 +91,13 @@ twistAngles = np.linspace(0 + angle_of_attack, tip_twist + angle_of_attack, airf
 twistOps = [rotateOp(theta) for theta in twistAngles]
 
 for i in range(airfoils_count):
+    X[i] = np.matmul(X[i], scalingOps[i])
+
+for i in range(airfoils_count):
     X[i] = np.matmul(X[i], twistOps[i])
 
 for i in range(airfoils_count):
-    X[i] = np.matmul(X[i], scalingOps[i])
+    X[i] = X[i] + shiftOps[i]
 
 x = np.vstack(X[:, :, 0])
 #x = x * np.linspace(x_base_scale, x_tip_scale, airfoils_count)[:, np.newaxis]
